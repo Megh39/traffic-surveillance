@@ -1,0 +1,23 @@
+@"
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+.env
+
+runs/
+logs/
+
+*.pt
+*.onnx
+*.engine
+
+evaluation/reports/*.json
+
+.vscode/
+.idea/
+
+Thumbs.db
+"@ | Set-Content .gitignore

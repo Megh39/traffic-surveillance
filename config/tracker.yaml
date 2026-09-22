@@ -1,0 +1,8 @@
+tracker:
+  name: bytetrack
+
+lifecycle:
+  confirmation_frames: 3
+  lost_buffer_frames: 30
+  minimum_track_points: 5
+  minimum_displacement_pixels: 10

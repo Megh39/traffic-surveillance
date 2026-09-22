@@ -1,0 +1,14 @@
+model:
+  name: yolo11n.pt
+  device: auto
+
+inference:
+  confidence_threshold: 0.25
+  iou_threshold: 0.45
+  image_size: 640
+
+classes:
+  - car
+  - van
+  - bus
+  - others

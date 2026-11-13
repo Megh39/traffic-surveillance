@@ -1,0 +1,10 @@
+1. Final detector settings
+Based on the eight experiments, my proposed settings are:
+Parameter	Current	Proposed
+Inference confidence	0.10	0.05
+Publishing confidence	0.30	0.30
+NMS IoU	0.45	0.50
+Image size	640	640
+Class-agnostic NMS	false	false
+
+The 0.05 threshold retains low-confidence detections for ByteTrack's second association stage. The 0.30 publishing threshold remains separate, so low-confidence detections need not automatically become published vehicle observations.

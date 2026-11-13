@@ -1,14 +1,27 @@
 model:
-  name: yolo11n.pt
+  weights: yolo11n.pt
   device: auto
+  half: true
 
 inference:
-  confidence_threshold: 0.25
-  iou_threshold: 0.45
   image_size: 640
+  confidence_threshold: 0.10
+  publish_confidence_threshold: 0.30
+  iou_threshold: 0.45
+  class_agnostic_nms: false
 
 classes:
-  - car
-  - van
-  - bus
-  - others
+  vehicle_class_ids:
+    - 2  # car
+    - 3  # motorcycle
+    - 5  # bus
+    - 7  # truck
+
+  taxonomy:
+    - car
+    - van
+    - bus
+    - truck
+    - two_wheeler
+    - three_wheeler
+    - other

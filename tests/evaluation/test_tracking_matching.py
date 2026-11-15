@@ -1,7 +1,7 @@
 
 import pytest
 
-from tvs.perception.tracker import TrackObservation
+from src.tvs.perception.tracker import TrackObservation
 from evaluation.detection.annotations import (
     GroundTruthBox,
     IgnoredRegion,

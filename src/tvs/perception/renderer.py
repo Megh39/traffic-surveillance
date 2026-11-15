@@ -3,8 +3,8 @@
 import cv2
 import numpy as np
 
-from tvs.events.frame import Frame
-from tvs.perception.tracker import TrackObservation
+from src.tvs.events.frame import Frame
+from src.tvs.perception.tracker import TrackObservation
 
 
 class TrackRenderer:

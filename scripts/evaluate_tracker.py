@@ -10,9 +10,9 @@ from evaluation.detection.annotations import load_detrac_annotations
 from evaluation.tracking.matching import match_frame_tracks
 from evaluation.tracking.metrics import compute_tracking_metrics
 
-from tvs.ingestion.image_sequence import ImageSequenceSource
-from tvs.perception.detector import DetectorConfig, VehicleDetector
-from tvs.perception.tracker import Tracker, TrackerConfig
+from src.tvs.ingestion.image_sequence import ImageSequenceSource
+from src.tvs.perception.detector import DetectorConfig, VehicleDetector
+from src.tvs.perception.tracker import Tracker, TrackerConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

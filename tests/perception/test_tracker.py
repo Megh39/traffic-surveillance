@@ -2,9 +2,9 @@
 
 import numpy as np
 
-from tvs.events.detection import Detection
-from tvs.events.frame import Frame
-from tvs.perception.tracker import Tracker, TrackerConfig
+from src.tvs.events.detection import Detection
+from src.tvs.events.frame import Frame
+from src.tvs.perception.tracker import Tracker, TrackerConfig
 
 
 FPS = 30.0

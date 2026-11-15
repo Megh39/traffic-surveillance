@@ -4,8 +4,8 @@ from typing import Iterator
 
 import cv2
 
-from tvs.events.frame import Frame
-from tvs.ingestion.models import IngestionStats
+from src.tvs.events.frame import Frame
+from src.tvs.ingestion.models import IngestionStats
 
 
 class VideoFileSource:

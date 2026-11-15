@@ -3,7 +3,7 @@
 import pytest
 import yaml
 
-from tvs.perception.detector import DetectorConfig
+from src.tvs.perception.detector import DetectorConfig
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

@@ -8,9 +8,9 @@ import yaml
 from ultralytics.engine.results import Boxes
 from ultralytics.trackers.byte_tracker import BYTETracker
 
-from tvs.events.detection import Detection
-from tvs.events.frame import Frame
-from tvs.perception.boxes import tlwh_to_xyxy, xyxy_to_tlwh
+from src.tvs.events.detection import Detection
+from src.tvs.events.frame import Frame
+from src.tvs.perception.boxes import tlwh_to_xyxy, xyxy_to_tlwh
 
 
 @dataclass(frozen=True, slots=True)

@@ -2,11 +2,11 @@
 from unittest.mock import Mock
 import numpy as np
 
-from tvs.events.frame import Frame
-from tvs.events.detection import Detection
+from src.tvs.events.frame import Frame
+from src.tvs.events.detection import Detection
 import pytest
 
-from tvs.perception.detector import (
+from src.tvs.perception.detector import (
     DetectorConfig,
     VehicleDetector,
 )

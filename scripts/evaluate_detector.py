@@ -8,8 +8,8 @@ import yaml
 
 from evaluation.detection.annotations import load_detrac_annotations
 from evaluation.detection.evaluator import evaluate_sequence
-from tvs.ingestion.image_sequence import ImageSequenceSource
-from tvs.perception.detector import DetectorConfig, VehicleDetector
+from src.tvs.ingestion.image_sequence import ImageSequenceSource
+from src.tvs.perception.detector import DetectorConfig, VehicleDetector
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

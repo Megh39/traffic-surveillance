@@ -2,7 +2,7 @@
 from math import isfinite
 from typing import Sequence
 
-from tvs.events.detection import Detection
+from src.tvs.events.detection import Detection
 from evaluation.detection.annotations import (
     GroundTruthBox,
     IgnoredRegion,

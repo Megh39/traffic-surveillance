@@ -1,6 +1,6 @@
 from pathlib import Path
 from unittest.mock import patch
-from tvs.ingestion.image_sequence import ImageSequenceSource
+from src.tvs.ingestion.image_sequence import ImageSequenceSource
 FIXTURE = Path("tests/fixtures/ingestion/MVI_20011")
 DATASET = Path("data/ua_detrac/DETRAC-Images/DETRAC-Images/MVI_20011")
 

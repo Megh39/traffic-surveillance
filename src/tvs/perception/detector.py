@@ -7,12 +7,12 @@ import torch
 import yaml
 from ultralytics import YOLO
 
-from tvs.events.detection import (
+from src.tvs.events.detection import (
     Detection,
     map_coco_vehicle_class,
 )
-from tvs.events.frame import Frame
-from tvs.perception.boxes import xyxy_to_tlwh
+from src.tvs.events.frame import Frame
+from src.tvs.perception.boxes import xyxy_to_tlwh
 
 
 @dataclass(frozen=True, slots=True)

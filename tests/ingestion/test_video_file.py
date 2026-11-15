@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pytest
 
-from tvs.ingestion.video_file import VideoFileSource
+from src.tvs.ingestion.video_file import VideoFileSource
 
 
 class FakeCapture:

@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from tvs.events.frame import Frame
-from tvs.perception.tracker import TrackObservation
-from tvs.perception.renderer import TrackRenderer
+from src.tvs.events.frame import Frame
+from src.tvs.perception.tracker import TrackObservation
+from src.tvs.perception.renderer import TrackRenderer
 
 
 def make_frame(frame_id: int) -> Frame:

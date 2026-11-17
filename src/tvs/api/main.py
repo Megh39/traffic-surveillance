@@ -7,6 +7,16 @@ from psycopg.rows import dict_row
 
 from src.tvs.db.analytics import TrafficAnalytics
 
+import logging
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import UploadFile, File
+from fastapi.responses import FileResponse
+
+from src.tvs.ingestion.video_file import VideoFileSource
+from src.tvs.pipeline.video_processor import process_video
+
 
 app = FastAPI(
     title="Traffic Surveillance API",
@@ -14,6 +24,23 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+UPLOAD_DIR = PROJECT_ROOT / "data" / "uploads"
+PROCESSED_VIDEO_DIR = PROJECT_ROOT / "outputs" / "uploaded_videos"
+
+MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500 MB
+
+ALLOWED_VIDEO_EXTENSIONS = {
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".mkv",
+    ".m4v",
+}
+
+logger = logging.getLogger(__name__)
 
 def _resolve_run(analytics, run_id: Optional[UUID] = None):
     """Return the requested completed run or the latest completed run."""
@@ -150,3 +177,119 @@ def runs(limit: int = Query(default=20, ge=1, le=100)):
         })
     finally:
         analytics.close()
+
+@app.post("/videos/process")
+def upload_and_process_video(file: UploadFile = File(...)):
+    """
+    Upload a video, process it through the detection and tracking
+    pipeline, and persist its observations in PostgreSQL.
+    """
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="A video filename is required.",
+        )
+
+    extension = Path(file.filename).suffix.lower()
+
+    if extension not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported video format.",
+        )
+
+    upload_id = uuid4().hex
+    camera_id = f"upload_{upload_id[:12]}"
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    PROCESSED_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+
+    input_path = UPLOAD_DIR / f"{upload_id}{extension}"
+    output_path = PROCESSED_VIDEO_DIR / f"{upload_id}.mp4"
+
+    try:
+        total_size = 0
+
+        with input_path.open("wb") as destination:
+            while True:
+                chunk = file.file.read(1024 * 1024)
+
+                if not chunk:
+                    break
+
+                total_size += len(chunk)
+
+                if total_size > MAX_UPLOAD_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="Video exceeds the 500 MB upload limit.",
+                    )
+
+                destination.write(chunk)
+
+        if total_size == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="The uploaded video is empty.",
+            )
+
+        source = VideoFileSource(video_path=input_path)
+
+        result = process_video(
+            source=source,
+            output_path=output_path,
+            camera_id=camera_id,
+        )
+
+        result.pop("output_path", None)
+
+        return {
+            "message": "Video processed successfully.",
+            "upload_id": upload_id,
+            "output_url": f"/videos/{upload_id}/output",
+            "result": result,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.exception("Video processing failed.")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Video processing failed: {exc}",
+        ) from exc
+
+    finally:
+        if input_path.exists():
+            input_path.unlink()
+
+
+@app.get("/videos/{upload_id}/output")
+def download_processed_video(upload_id: str):
+    """Return the annotated video generated from an uploaded video."""
+
+    try:
+        validated_id = UUID(upload_id).hex
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid upload ID.",
+        )
+
+    output_path = (
+        PROCESSED_VIDEO_DIR / f"{validated_id}.mp4"
+    )
+
+    if not output_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Processed video not found.",
+        )
+
+    return FileResponse(
+        path=output_path,
+        media_type="video/mp4",
+        filename=f"processed_{validated_id}.mp4",
+    )

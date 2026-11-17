@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from unittest.mock import Mock
 import numpy as np
 
@@ -59,11 +59,11 @@ def make_detector(tmp_path, monkeypatch, vehicle_class_ids=(2, 3, 5, 7)):
     }
 
     monkeypatch.setattr(
-        "tvs.perception.detector.YOLO",
+        "src.tvs.perception.detector.YOLO",
         Mock(return_value=model),
     )
     monkeypatch.setattr(
-        "tvs.perception.detector.torch.cuda.is_available",
+        "src.tvs.perception.detector.torch.cuda.is_available",
         lambda: False,
     )
 
@@ -96,15 +96,15 @@ def make_cuda_detector(tmp_path, monkeypatch):
     }
 
     monkeypatch.setattr(
-        "tvs.perception.detector.YOLO",
+        "src.tvs.perception.detector.YOLO",
         Mock(return_value=model),
     )
     monkeypatch.setattr(
-        "tvs.perception.detector.torch.cuda.is_available",
+        "src.tvs.perception.detector.torch.cuda.is_available",
         lambda: True,
     )
     monkeypatch.setattr(
-        "tvs.perception.detector.torch.cuda.empty_cache",
+        "src.tvs.perception.detector.torch.cuda.empty_cache",
         lambda: None,
     )
 
@@ -117,7 +117,7 @@ class TestDeviceSelection:
 
     def test_auto_selects_cuda_when_available(self, monkeypatch):
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: True,
         )
 
@@ -125,7 +125,7 @@ class TestDeviceSelection:
 
     def test_auto_selects_cpu_when_cuda_unavailable(self, monkeypatch):
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: False,
         )
 
@@ -133,7 +133,7 @@ class TestDeviceSelection:
 
     def test_explicit_cpu_selection(self, monkeypatch):
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: True,
         )
 
@@ -141,7 +141,7 @@ class TestDeviceSelection:
 
     def test_explicit_cuda_selection(self, monkeypatch):
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: True,
         )
 
@@ -149,7 +149,7 @@ class TestDeviceSelection:
 
     def test_explicit_gpu_zero_selection(self, monkeypatch):
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: True,
         )
 
@@ -157,7 +157,7 @@ class TestDeviceSelection:
 
     def test_cuda_request_fails_when_unavailable(self, monkeypatch):
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: False,
         )
 
@@ -166,7 +166,7 @@ class TestDeviceSelection:
 
     def test_gpu_zero_request_fails_when_unavailable(self, monkeypatch):
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: False,
         )
 
@@ -184,7 +184,7 @@ class TestModelLoading:
         mock_yolo = Mock()
 
         monkeypatch.setattr(
-            "tvs.perception.detector.YOLO",
+            "src.tvs.perception.detector.YOLO",
             mock_yolo,
         )
 
@@ -203,11 +203,11 @@ class TestModelLoading:
         mock_yolo = Mock(return_value=mock_model)
 
         monkeypatch.setattr(
-            "tvs.perception.detector.YOLO",
+            "src.tvs.perception.detector.YOLO",
             mock_yolo,
         )
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: False,
         )
 
@@ -222,11 +222,11 @@ class TestModelLoading:
         weights.touch()
 
         monkeypatch.setattr(
-            "tvs.perception.detector.YOLO",
+            "src.tvs.perception.detector.YOLO",
             Mock(),
         )
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: False,
         )
 
@@ -239,11 +239,11 @@ class TestModelLoading:
         weights.touch()
 
         monkeypatch.setattr(
-            "tvs.perception.detector.YOLO",
+            "src.tvs.perception.detector.YOLO",
             Mock(),
         )
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: True,
         )
 
@@ -257,11 +257,11 @@ class TestModelLoading:
         weights.touch()
 
         monkeypatch.setattr(
-            "tvs.perception.detector.YOLO",
+            "src.tvs.perception.detector.YOLO",
             Mock(),
         )
         monkeypatch.setattr(
-            "tvs.perception.detector.torch.cuda.is_available",
+            "src.tvs.perception.detector.torch.cuda.is_available",
             lambda: True,
         )
 

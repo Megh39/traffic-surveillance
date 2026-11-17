@@ -19,6 +19,9 @@ dependencies = [
     "torch==2.12.0",
     "torchvision==0.27.0",
     "ultralytics==8.4.90",
+    "fastapi==0.163.1",
+    "streamlit==1.67.0",
+    "uvicorn==0.54.0",
 ]
 
 [tool.uv]

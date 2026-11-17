@@ -1,6 +1,6 @@
 camera_id: mvi20011
 source_type: image_sequence
-source_path: ./data/DETRAC-Images/DETRAC-Images/MVI_20011
+source_path: ./data/ua_detrac/DETRAC-Images/DETRAC-Images/MVI_20011
 fps: 30.0
 video_start_ts: null
 

@@ -1,0 +1,19 @@
+model:
+  name: vehicle-reid-0001
+  architecture: osnet_ain_x1_0
+  format: onnx
+  weights: models/reid/osnet_ain_x1_0_vehicle_reid.onnx
+  input_width: 208
+  input_height: 208
+  embedding_dimension: 512
+
+runtime:
+  provider: CPUExecutionProvider
+  intra_op_num_threads: 2
+  inter_op_num_threads: 1
+  normalize_embeddings: true
+
+matching:
+  # Deliberately unset. Do not use an arbitrary threshold as a production
+  # same-vehicle decision. Calibrate on held-out footage from project cameras.
+  cosine_similarity_threshold: null

@@ -27,3 +27,4 @@ Thumbs.db
 # Generated pipeline outputs
 outputs/*.mp4
 outputs/uploaded_videos/
+test_images/

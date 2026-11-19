@@ -17,7 +17,6 @@ from fastapi.responses import FileResponse
 from src.tvs.ingestion.video_file import VideoFileSource
 from src.tvs.pipeline.video_processor import process_video
 
-
 app = FastAPI(
     title="Traffic Surveillance API",
     description="Analytics API for the traffic video surveillance system.",
@@ -42,6 +41,7 @@ ALLOWED_VIDEO_EXTENSIONS = {
 
 logger = logging.getLogger(__name__)
 
+
 def _resolve_run(analytics, run_id: Optional[UUID] = None):
     """Return the requested completed run or the latest completed run."""
 
@@ -58,8 +58,7 @@ def _resolve_run(analytics, run_id: Optional[UUID] = None):
                 (run_id,),
             )
         else:
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT run_id, camera_id, started_at, completed_at,
                        source_fps, frames_processed, total_detections,
                        published_observations, unique_tracks
@@ -67,8 +66,7 @@ def _resolve_run(analytics, run_id: Optional[UUID] = None):
                 WHERE status = 'completed'
                 ORDER BY completed_at DESC
                 LIMIT 1
-                """
-            )
+                """)
 
         run = cursor.fetchone()
 
@@ -107,10 +105,12 @@ def summary(run_id: Optional[UUID] = None):
         run = _resolve_run(analytics, run_id)
         metrics = analytics.get_summary(run["run_id"])
 
-        return jsonable_encoder({
-            "run": run,
-            "summary": metrics,
-        })
+        return jsonable_encoder(
+            {
+                "run": run,
+                "summary": metrics,
+            }
+        )
     finally:
         analytics.close()
 
@@ -122,10 +122,12 @@ def vehicle_types(run_id: Optional[UUID] = None):
         run = _resolve_run(analytics, run_id)
         results = analytics.get_vehicle_types(run["run_id"])
 
-        return jsonable_encoder({
-            "run_id": run["run_id"],
-            "data": results,
-        })
+        return jsonable_encoder(
+            {
+                "run_id": run["run_id"],
+                "data": results,
+            }
+        )
     finally:
         analytics.close()
 
@@ -137,11 +139,13 @@ def observations_over_time(run_id: Optional[UUID] = None):
         run = _resolve_run(analytics, run_id)
         results = analytics.get_observations_over_time(run["run_id"])
 
-        return jsonable_encoder({
-            "run_id": run["run_id"],
-            "interval_seconds": 10,
-            "data": results,
-        })
+        return jsonable_encoder(
+            {
+                "run_id": run["run_id"],
+                "interval_seconds": 10,
+                "data": results,
+            }
+        )
     finally:
         analytics.close()
 
@@ -156,11 +160,13 @@ def tracks(
         run = _resolve_run(analytics, run_id)
         results = analytics.get_tracks(run["run_id"], limit)
 
-        return jsonable_encoder({
-            "run_id": run["run_id"],
-            "count": len(results),
-            "data": results,
-        })
+        return jsonable_encoder(
+            {
+                "run_id": run["run_id"],
+                "count": len(results),
+                "data": results,
+            }
+        )
     finally:
         analytics.close()
 
@@ -171,12 +177,15 @@ def runs(limit: int = Query(default=20, ge=1, le=100)):
     try:
         results = analytics.get_runs(limit)
 
-        return jsonable_encoder({
-            "count": len(results),
-            "data": results,
-        })
+        return jsonable_encoder(
+            {
+                "count": len(results),
+                "data": results,
+            }
+        )
     finally:
         analytics.close()
+
 
 @app.post("/videos/process")
 def upload_and_process_video(file: UploadFile = File(...)):
@@ -278,9 +287,7 @@ def download_processed_video(upload_id: str):
             detail="Invalid upload ID.",
         )
 
-    output_path = (
-        PROCESSED_VIDEO_DIR / f"{validated_id}.mp4"
-    )
+    output_path = PROCESSED_VIDEO_DIR / f"{validated_id}.mp4"
 
     if not output_path.is_file():
         raise HTTPException(
@@ -292,4 +299,5 @@ def download_processed_video(upload_id: str):
         path=output_path,
         media_type="video/mp4",
         filename=f"processed_{validated_id}.mp4",
+        content_disposition_type="inline",
     )

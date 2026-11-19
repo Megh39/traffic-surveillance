@@ -210,9 +210,6 @@ def main():
 
         for frame in source.frames():
 
-            if frame.frame_id not in annotations.frames:
-                raise ValueError(f"Missing annotations for frame {frame.frame_id}")
-
             detections = detector.detect(frame)
 
             total_detections += len(detections)
@@ -253,6 +250,10 @@ def main():
 
             prediction_file.write(json.dumps(prediction_record) + "\n")
 
+            # Preserve tracker continuity, but evaluate only annotated frames.
+            if frame.frame_id not in annotations.frames:
+                continue
+
             # Evaluate this frame.
 
             frame_result = match_frame_tracks(
@@ -260,6 +261,7 @@ def main():
                 ground_truth=list(annotations.frames[frame.frame_id]),
                 ignored_regions=annotations.ignored_regions,
                 iou_threshold=args.matching_iou,
+                frame_id=frame.frame_id,
             )
 
             frame_results.append(frame_result)

@@ -13,7 +13,7 @@ class GroundTruthBox:
     target_id: str
     bbox: BBox
     vehicle_type: str
-    truncation_ratio: float
+    truncation_ratio: float | None
     occluded: bool
 
 
@@ -28,6 +28,7 @@ class AnnotationSequence:
     ignored_regions: tuple[IgnoredRegion, ...]
     total_annotations: int
     excluded_truncated_annotations: int
+    invalid_truncation_annotations: int = 0
 
     @property
     def retained_annotations(self) -> int:
@@ -87,6 +88,7 @@ def load_detrac_annotations(
     frames: dict[int, tuple[GroundTruthBox, ...]] = {}
     total_annotations = 0
     excluded_annotations = 0
+    invalid_truncation_annotations = 0
 
     for frame_element in root.findall("./frame"):
         try:
@@ -137,20 +139,18 @@ def load_detrac_annotations(
                 truncation_ratio = float(
                     attribute.attrib["truncation_ratio"]
                 )
-            except (KeyError, ValueError) as exc:
-                raise ValueError(
-                    f"Invalid truncation ratio for target {target_id}"
-                ) from exc
+            except (KeyError, ValueError):
+                truncation_ratio = None
 
-            if (
+            if truncation_ratio is not None and (
                 not math.isfinite(truncation_ratio)
                 or not 0 <= truncation_ratio <= 1
             ):
-                raise ValueError(
-                    f"Invalid truncation ratio for target {target_id}"
-                )
+                truncation_ratio = None
 
-            if truncation_ratio >= max_truncation_ratio:
+            if truncation_ratio is None:
+                invalid_truncation_annotations += 1
+            elif truncation_ratio >= max_truncation_ratio:
                 excluded_annotations += 1
                 continue
 
@@ -189,4 +189,5 @@ def load_detrac_annotations(
         ignored_regions=tuple(ignored_regions),
         total_annotations=total_annotations,
         excluded_truncated_annotations=excluded_annotations,
+        invalid_truncation_annotations=invalid_truncation_annotations,
     )

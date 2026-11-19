@@ -193,3 +193,11 @@ class TestTrackingFrameMatching:
         assert result.true_positive_count == 0
         assert result.false_positive_count == 0
         assert result.false_negative_count == 0
+
+    def test_empty_frame_preserves_explicit_frame_id(self):
+        result = match_frame_tracks([], [], frame_id=542)
+
+        assert result.frame_id == 542
+        assert result.true_positive_count == 0
+        assert result.false_positive_count == 0
+        assert result.false_negative_count == 0

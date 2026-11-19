@@ -53,6 +53,7 @@ def match_frame_tracks(
     ignored_regions: tuple[IgnoredRegion, ...] | list[IgnoredRegion] = (),
     iou_threshold: float = 0.5,
     ignore_coverage_threshold: float = 0.5,
+    frame_id: int | None = None,
 ) -> FrameTrackingMatchResult:
 
     if not 0.0 < iou_threshold <= 1.0:
@@ -73,7 +74,11 @@ def match_frame_tracks(
     if len(frame_ids) > 1:
         raise ValueError("All predictions and ground truth must belong to one frame.")
 
-    frame_id = next(iter(frame_ids), 0)
+    if frame_id is not None and frame_ids and frame_ids != {frame_id}:
+        raise ValueError("Explicit frame ID does not match predictions or ground truth.")
+
+    if frame_id is None:
+        frame_id = next(iter(frame_ids), 0)
 
     prediction_ids = [
         pred.published_track_id for pred in predictions

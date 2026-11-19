@@ -1,0 +1,41 @@
+{
+    "sequence": "MVI_40852",
+    "model": "yolo11n.pt",
+    "fps": 30.0,
+    "confidence_threshold": 0.1,
+    "nms_iou_threshold": 0.45,
+    "matching_iou_threshold": 0.5,
+    "frames_processed": 1150,
+    "total_ground_truth_detections": 20167,
+    "total_yolo_detections": 35147,
+    "published_track_observations": 18928,
+    "unique_published_track_ids": 177,
+    "association_statistics": {
+        "matched_tracks": 23003,
+        "unmatched_tracks": 7950,
+        "unmatched_detections": 12144
+    },
+    "processing_time_seconds": 60.96683480008505,
+    "pipeline_throughput_fps": 18.862714519639056,
+    "metrics": {
+        "true_positives": 15497,
+        "false_positives": 2045,
+        "false_negatives": 4670,
+        "ground_truth_detections": 20167,
+        "prediction_detections": 17542,
+        "ignored_predictions": 1386,
+        "identity_switches": 89,
+        "fragmentations": 131,
+        "id_true_positives": 14085,
+        "id_false_positives": 3457,
+        "id_false_negatives": 6082,
+        "precision": 0.8834226428001368,
+        "recall": 0.7684335796102544,
+        "mota": 0.6626171468240194,
+        "motp": 0.8324465008084269,
+        "id_precision": 0.8029301105917227,
+        "id_recall": 0.6984182079635047,
+        "idf1": 0.7470365164814766
+    },
+    "prediction_file": "MVI_40852_tracking_predictions.jsonl"
+}

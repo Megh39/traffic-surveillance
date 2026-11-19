@@ -21,7 +21,7 @@ evaluation/reports/*.json
 Thumbs.db
 
 # Generated evaluation artifacts
-evaluation/reports/
+# evaluation/reports/
 
 
 # Generated pipeline outputs

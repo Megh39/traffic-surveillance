@@ -11,8 +11,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 IMAGE_ROOT = ROOT / "data/ua_detrac/DETRAC-Images/DETRAC-Images"
-TRAIN_ROOT = ROOT / "data/ua_detrac/DETRAC-Train-Annotations-XML/DETRAC-Train-Annotations-XML"
-TEST_ROOT = ROOT / "data/ua_detrac/DETRAC-Test-Annotations-XML/DETRAC-Test-Annotations-XML"
+TRAIN_ROOT = (
+    ROOT / "data/ua_detrac/DETRAC-Train-Annotations-XML/DETRAC-Train-Annotations-XML"
+)
+TEST_ROOT = (
+    ROOT / "data/ua_detrac/DETRAC-Test-Annotations-XML/DETRAC-Test-Annotations-XML"
+)
 
 
 def parse_args():
@@ -21,13 +25,21 @@ def parse_args():
     )
     parser.add_argument("--split", choices=["train", "test", "all"], default="all")
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--camera-config", type=Path, default=ROOT / "config/camera_mvi20011.yaml")
-    parser.add_argument("--detector-config", type=Path, default=ROOT / "config/detector.yaml")
-    parser.add_argument("--tracker-config", type=Path, default=ROOT / "config/tracker.yaml")
+    parser.add_argument(
+        "--camera-config", type=Path, default=ROOT / "config/camera_mvi20011.yaml"
+    )
+    parser.add_argument(
+        "--detector-config", type=Path, default=ROOT / "config/detector.yaml"
+    )
+    parser.add_argument(
+        "--tracker-config", type=Path, default=ROOT / "config/tracker.yaml"
+    )
     parser.add_argument("--confidence", type=float, default=None)
     parser.add_argument("--nms-iou", type=float, default=None)
     parser.add_argument("--matching-iou", type=float, default=0.5)
-    parser.add_argument("--output-dir", type=Path, default=ROOT / "evaluation/reports/dataset")
+    parser.add_argument(
+        "--output-dir", type=Path, default=ROOT / "evaluation/reports/dataset"
+    )
     parser.add_argument("--no-resume", action="store_true")
     args = parser.parse_args()
 
@@ -73,7 +85,15 @@ def aggregate_reports(reports):
     ]
 
     totals = {name: sum(r["metrics"][name] for r in reports) for name in metric_names}
-
+    association_names = [
+        "matched_tracks",
+        "unmatched_tracks",
+        "unmatched_detections",
+    ]
+    association_totals = {
+        name: sum(report["association_statistics"][name] for report in reports)
+        for name in association_names
+    }
     tp = totals["true_positives"]
     fp = totals["false_positives"]
     fn = totals["false_negatives"]
@@ -84,20 +104,22 @@ def aggregate_reports(reports):
     idfn = totals["id_false_negatives"]
 
     total_iou = sum(
-        r["metrics"]["motp"] * r["metrics"]["true_positives"]
-        for r in reports
+        r["metrics"]["motp"] * r["metrics"]["true_positives"] for r in reports
     )
 
-    totals.update({
-        "precision": tp / (tp + fp) if tp + fp else 0.0,
-        "recall": tp / (tp + fn) if tp + fn else 0.0,
-        "mota": 1 - (fn + fp + totals["identity_switches"]) / gt if gt else 0.0,
-        "motp": total_iou / tp if tp else 0.0,
-        "id_precision": idtp / (idtp + idfp) if idtp + idfp else 0.0,
-        "id_recall": idtp / (idtp + idfn) if idtp + idfn else 0.0,
-        "idf1": (2 * idtp) / (2 * idtp + idfp + idfn)
-        if 2 * idtp + idfp + idfn else 0.0,
-    })
+    totals.update(
+        {
+            "precision": tp / (tp + fp) if tp + fp else 0.0,
+            "recall": tp / (tp + fn) if tp + fn else 0.0,
+            "mota": 1 - (fn + fp + totals["identity_switches"]) / gt if gt else 0.0,
+            "motp": total_iou / tp if tp else 0.0,
+            "id_precision": idtp / (idtp + idfp) if idtp + idfp else 0.0,
+            "id_recall": idtp / (idtp + idfn) if idtp + idfn else 0.0,
+            "idf1": (
+                (2 * idtp) / (2 * idtp + idfp + idfn) if 2 * idtp + idfp + idfn else 0.0
+            ),
+        }
+    )
 
     processing_time = sum(r["processing_time_seconds"] for r in reports)
     frames = sum(r["frames_processed"] for r in reports)
@@ -116,6 +138,7 @@ def aggregate_reports(reports):
         "processing_time_seconds": processing_time,
         "pipeline_throughput_fps": frames / processing_time if processing_time else 0.0,
         "metrics": totals,
+        "association_statistics": association_totals,
         "sequence_reports": [r["sequence"] for r in reports],
     }
 
@@ -135,7 +158,7 @@ def evaluate_split(args, split, annotation_root, fps, max_skip_ratio, fingerprin
     sequences = sorted(annotation_names)
 
     if args.limit is not None:
-        sequences = sequences[:args.limit]
+        sequences = sequences[: args.limit]
 
     output_dir = args.output_dir / split
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -164,9 +187,19 @@ def evaluate_split(args, split, annotation_root, fps, max_skip_ratio, fingerprin
             and report_path.is_file()
             and prediction_path.is_file()
         ):
-            print(f"[{index}/{len(sequences)}] SKIP {sequence} (already completed)")
-            reports.append(json.loads(report_path.read_text(encoding="utf-8")))
-            continue
+            existing_report = json.loads(report_path.read_text(encoding="utf-8"))
+
+            if "association_statistics" in existing_report:
+                print(
+                    f"[{index}/{len(sequences)}] SKIP {sequence} " "(already completed)"
+                )
+                reports.append(existing_report)
+                continue
+
+            print(
+                f"[{index}/{len(sequences)}] REPROCESS {sequence} "
+                "(association statistics missing)"
+            )
 
         image_dir = IMAGE_ROOT / sequence
         annotation_path = annotation_root / f"{sequence}.xml"
@@ -194,13 +227,20 @@ def evaluate_split(args, split, annotation_root, fps, max_skip_ratio, fingerprin
                 sys.executable,
                 "-m",
                 "scripts.evaluate_tracker",
-                "--sequence", sequence,
-                "--camera-config", str(camera_file_path),
-                "--annotation", str(annotation_path),
-                "--detector-config", str(args.detector_config.resolve()),
-                "--tracker-config", str(args.tracker_config.resolve()),
-                "--matching-iou", str(args.matching_iou),
-                "--output-dir", str(output_dir.resolve()),
+                "--sequence",
+                sequence,
+                "--camera-config",
+                str(camera_file_path),
+                "--annotation",
+                str(annotation_path),
+                "--detector-config",
+                str(args.detector_config.resolve()),
+                "--tracker-config",
+                str(args.tracker_config.resolve()),
+                "--matching-iou",
+                str(args.matching_iou),
+                "--output-dir",
+                str(output_dir.resolve()),
             ]
 
             if args.confidence is not None:

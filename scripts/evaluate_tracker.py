@@ -195,6 +195,10 @@ def main():
     total_detections = 0
     total_published_observations = 0
 
+    total_matched_tracks = 0
+    total_unmatched_tracks = 0
+    total_unmatched_detections = 0
+
     unique_track_ids = set()
 
     start_time = perf_counter()
@@ -218,7 +222,12 @@ def main():
                 detections,
                 frame,
             )
+            association = tracker.association_stats
 
+            if association is not None:
+                total_matched_tracks += association.matched_tracks
+                total_unmatched_tracks += association.unmatched_tracks
+                total_unmatched_detections += association.unmatched_detections
             # Only published vehicle identities are evaluated.
 
             published_observations = [
@@ -297,6 +306,11 @@ def main():
         "total_yolo_detections": total_detections,
         "published_track_observations": (total_published_observations),
         "unique_published_track_ids": len(unique_track_ids),
+        "association_statistics": {
+            "matched_tracks": total_matched_tracks,
+            "unmatched_tracks": total_unmatched_tracks,
+            "unmatched_detections": total_unmatched_detections,
+        },
         "processing_time_seconds": elapsed_time,
         "pipeline_throughput_fps": throughput,
         "metrics": asdict(metrics),

@@ -54,6 +54,13 @@ def parse_args():
     return parser.parse_args()
 
 
+def annotated_frames(frames, annotated_frame_ids):
+    """Yield only frames with ground-truth annotations."""
+    for frame in frames:
+        if frame.frame_id in annotated_frame_ids:
+            yield frame
+
+
 def main():
     args = parse_args()
 
@@ -140,8 +147,10 @@ def main():
             f"({annotations.retained_annotations} ground-truth boxes)"
         )
 
+        # Some UA-DETRAC image sequences contain frames without XML annotations.
+        # Detection metrics must only include frames with ground truth.
         result = evaluate_sequence(
-            frames=source.frames(),
+            frames=annotated_frames(source.frames(), annotations.frames),
             detector=detector,
             annotations=annotations,
             iou_thresholds=(0.5, 0.7),

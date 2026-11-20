@@ -1,4 +1,4 @@
-﻿import altair as alt
+import altair as alt
 import pandas as pd
 import requests
 import streamlit as st
@@ -318,8 +318,8 @@ if completed_runs:
         )
         selected_run_id = run_options[selected_label]
 
-tab_process, tab_analytics, tab_tracks, tab_history = st.tabs(
-    ["Process video", "Analytics", "Vehicle tracks", "History"]
+tab_process, tab_analytics, tab_tracks, tab_reid, tab_history = st.tabs(
+    ["Process video", "Analytics", "Vehicle tracks", "Vehicle Re-ID", "History"]
 )
 
 # =========================================================
@@ -456,6 +456,24 @@ with tab_process:
         with st.expander("Tracking association statistics"):
             st.json(result.get("association_stats", {}))
 
+        reid_result = result.get("reid", {})
+        st.subheader("Re-Identification processing")
+        r1, r2, r3, r4 = st.columns(4)
+        r1.metric("Descriptors stored", fmt_int(reid_result.get("persisted_descriptors", 0)))
+        r2.metric("New persistent IDs", fmt_int(reid_result.get("created_new_identities", 0)))
+        r3.metric("Cross-run candidates", fmt_int(reid_result.get("candidate_count", 0)))
+        r4.metric("Tracks skipped", fmt_int(reid_result.get("skipped_missing_track", 0)))
+        st.caption(
+            "Descriptors are visual feature vectors. A candidate is a possible "
+            "cross-run match, not an automatically confirmed vehicle identity."
+        )
+        if reid_result.get("candidates"):
+            st.dataframe(
+                pd.DataFrame(reid_result["candidates"]),
+                use_container_width=True,
+                hide_index=True,
+            )
+
         if upload_id:
             st.subheader("Processed video")
 
@@ -475,7 +493,8 @@ with tab_process:
 # =========================================================
 
 summary = run = None
-vehicle_data, timeline_data, track_data = [], [], []
+reid_response = {}
+vehicle_data, timeline_data, track_data, reid_summary, reid_data = [], [], [], {}, []
 
 if selected_run_id is not None:
     params = {"run_id": selected_run_id}
@@ -495,6 +514,9 @@ if selected_run_id is not None:
             api_url,
             {"run_id": selected_run_id, "limit": 1000},
         ).get("data", [])
+        reid_response = fetch_api("/analytics/reid", api_url, params)
+        reid_summary = reid_response.get("summary", {})
+        reid_data = reid_response.get("data", [])
     except (requests.RequestException, KeyError, ValueError) as exc:
         summary = run = None
         with tab_analytics:
@@ -652,7 +674,108 @@ with tab_tracks:
         st.info("No track records for this run.")
 
 # ---------------------------------------------------------
-# TAB 4: HISTORY
+# TAB 4: VEHICLE RE-IDENTIFICATION
+# ---------------------------------------------------------
+
+with tab_reid:
+    st.subheader("Vehicle Re-Identification")
+    st.write(
+        "This view reads the persisted descriptor and identity records for the "
+        "selected processing run. It distinguishes newly assigned persistent "
+        "IDs from unconfirmed cross-run candidates."
+    )
+
+    if not completed_runs:
+        st.info(NO_RUN_MESSAGE)
+    elif selected_run_id is None:
+        st.info("Select a completed processing run in the sidebar.")
+    elif reid_data or reid_summary:
+        st.caption(
+            f"Run {str(selected_run_id)[:8]} · "
+            f"{fmt_time(run.get('started_at')) if run else ''}"
+        )
+
+        a, b, c, d = st.columns(4)
+        a.metric("Tracks in run", fmt_int(reid_summary.get("total_tracks", 0)))
+        b.metric("Descriptors stored", fmt_int(reid_summary.get("descriptors_stored", 0)))
+        c.metric("New persistent IDs", fmt_int(reid_summary.get("new_identities", 0)))
+        d.metric("Candidate matches", fmt_int(reid_summary.get("candidate_matches", 0)))
+
+        e, f, g, h = st.columns(4)
+        e.metric("Confirmed matches", fmt_int(reid_summary.get("confirmed_matches", 0)))
+        f.metric("Pending", fmt_int(reid_summary.get("pending_identities", 0)))
+        g.metric("Not processed", fmt_int(reid_summary.get("not_processed", 0)))
+        h.metric("Missing descriptors", fmt_int(reid_summary.get("descriptors_missing", 0)))
+
+        st.markdown("**Identity status distribution**")
+        status_counts = reid_response.get("status_counts", {})
+        if status_counts:
+            status_df = pd.DataFrame(
+                [{"Status": key.replace("_", " ").title(), "Tracks": value}
+                 for key, value in status_counts.items()]
+            )
+            st.dataframe(status_df, use_container_width=True, hide_index=True)
+
+        reid_df = pd.DataFrame(reid_data)
+        if not reid_df.empty:
+            display_columns = [
+                "published_track_id",
+                "track_id",
+                "vehicle_type",
+                "observation_count",
+                "descriptor_stored",
+                "embedding_dimension",
+                "match_status",
+                "persistent_vehicle_id",
+                "candidate_vehicle_id",
+                "candidate_similarity",
+            ]
+            display_columns = [column for column in display_columns if column in reid_df.columns]
+            view_df = reid_df[display_columns].copy()
+
+            status_filter = st.multiselect(
+                "Filter identity status",
+                sorted(view_df["match_status"].dropna().unique().tolist()),
+                default=sorted(view_df["match_status"].dropna().unique().tolist()),
+            )
+            view_df = view_df[view_df["match_status"].isin(status_filter)]
+
+            vehicle_types_filter = sorted(view_df["vehicle_type"].dropna().unique().tolist())
+            chosen_vehicle_types = st.multiselect(
+                "Filter vehicle type",
+                vehicle_types_filter,
+                placeholder="All vehicle types",
+            )
+            if chosen_vehicle_types:
+                view_df = view_df[view_df["vehicle_type"].isin(chosen_vehicle_types)]
+
+            st.caption(f"Showing {len(view_df):,} ReID track records.")
+            st.dataframe(view_df, use_container_width=True, hide_index=True, height=480)
+
+            st.download_button(
+                "Download ReID records as CSV",
+                data=view_df.to_csv(index=False).encode("utf-8"),
+                file_name="vehicle_reid_records.csv",
+                mime="text/csv",
+            )
+
+            with st.expander("How to interpret these fields"):
+                st.markdown(
+                    "- **Published Track ID:** ID assigned by the tracking pipeline within this run.\n"
+                    "- **Database Track ID:** Internal PostgreSQL row ID for that track.\n"
+                    "- **Persistent Vehicle ID:** Identity record created for a vehicle track; "
+                    "it is not proof of a cross-camera match unless the status is Confirmed.\n"
+                    "- **Candidate Vehicle ID:** Existing persistent identity suggested by visual "
+                    "similarity. It remains unconfirmed.\n"
+                    "- **Descriptor:** A 512-dimensional numerical representation of the vehicle crop."
+                )
+        else:
+            st.info("No vehicle tracks were returned for this run.")
+    else:
+        st.info("No ReID records are available for this run.")
+
+# ---------------------------------------------------------
+# TAB 5: HISTORY
 # ---------------------------------------------------------
 
 with tab_history:

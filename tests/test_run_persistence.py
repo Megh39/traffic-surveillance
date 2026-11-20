@@ -82,7 +82,8 @@ class RunPersistenceTests(unittest.TestCase):
 
     def test_skips_descriptor_without_database_track_mapping(self):
         result = persist_finalized_track_descriptors(
-            self.connection, self.run_id, {}, self.descriptors
+            self.connection, self.run_id, {}, self.descriptors,
+            candidate_finder=lambda *args, **kwargs: [],
         )
         self.assertEqual(result["persisted_descriptors"], 0)
         self.assertEqual(result["skipped_missing_track"], 1)
@@ -95,6 +96,32 @@ class RunPersistenceTests(unittest.TestCase):
                 self.track_map,
                 self.descriptors,
                 candidate_limit=0,
+            )
+
+    def test_clamps_floating_point_similarity_overshoot(self):
+        candidate = {
+            "persistent_vehicle_id": 88,
+            "similarity": 1.0000001,
+            "source_run_id": str(uuid4()),
+            "source_published_track_id": 4,
+        }
+        result = persist_finalized_track_descriptors(
+            self.connection, self.run_id, self.track_map, self.descriptors,
+            candidate_finder=lambda *args, **kwargs: [candidate],
+        )
+        self.assertEqual(result["candidates"][0]["similarity"], 1.0)
+
+    def test_rejects_non_finite_similarity(self):
+        candidate = {
+            "persistent_vehicle_id": 88,
+            "similarity": float("nan"),
+            "source_run_id": str(uuid4()),
+            "source_published_track_id": 4,
+        }
+        with self.assertRaises(ValueError):
+            persist_finalized_track_descriptors(
+                self.connection, self.run_id, self.track_map, self.descriptors,
+                candidate_finder=lambda *args, **kwargs: [candidate],
             )
 
 

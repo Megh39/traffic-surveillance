@@ -1,4 +1,4 @@
-﻿from typing import Optional
+from typing import Optional
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Query
@@ -165,6 +165,70 @@ def tracks(
                 "run_id": run["run_id"],
                 "count": len(results),
                 "data": results,
+            }
+        )
+    finally:
+        analytics.close()
+
+
+@app.get("/analytics/reid")
+def reid_analytics(run_id: Optional[UUID] = None):
+    """Return persisted ReID state for every track in one completed run."""
+    analytics = TrafficAnalytics()
+    try:
+        run = _resolve_run(analytics, run_id)
+        with analytics.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    vt.track_id,
+                    vt.published_track_id,
+                    vt.vehicle_type,
+                    vt.observation_count,
+                    vt.first_frame_id,
+                    vt.last_frame_id,
+                    (rd.descriptor_id IS NOT NULL) AS descriptor_stored,
+                    rd.embedding_dimension,
+                    rd.created_at AS descriptor_created_at,
+                    COALESCE(vti.match_status, 'not_processed') AS match_status,
+                    vti.persistent_vehicle_id,
+                    vti.candidate_vehicle_id,
+                    vti.candidate_similarity,
+                    vti.updated_at AS identity_updated_at
+                FROM vehicle_tracks AS vt
+                LEFT JOIN vehicle_reid_descriptors AS rd
+                    ON rd.track_id = vt.track_id
+                LEFT JOIN vehicle_track_identities AS vti
+                    ON vti.track_id = vt.track_id
+                WHERE vt.run_id = %s
+                ORDER BY vt.published_track_id
+                """,
+                (run["run_id"],),
+            )
+            records = cursor.fetchall()
+
+        total_tracks = len(records)
+        descriptor_count = sum(bool(row["descriptor_stored"]) for row in records)
+        status_counts = {}
+        for row in records:
+            status = row["match_status"]
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        return jsonable_encoder(
+            {
+                "run": run,
+                "summary": {
+                    "total_tracks": total_tracks,
+                    "descriptors_stored": descriptor_count,
+                    "descriptors_missing": total_tracks - descriptor_count,
+                    "new_identities": status_counts.get("new", 0),
+                    "candidate_matches": status_counts.get("candidate", 0),
+                    "confirmed_matches": status_counts.get("confirmed", 0),
+                    "pending_identities": status_counts.get("pending", 0),
+                    "not_processed": status_counts.get("not_processed", 0),
+                },
+                "status_counts": status_counts,
+                "data": records,
             }
         )
     finally:

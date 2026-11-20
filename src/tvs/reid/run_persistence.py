@@ -82,6 +82,15 @@ def persist_finalized_track_descriptors(
                 limit=candidate_limit,
             )
             best = candidates[0] if candidates else None
+            # Cosine similarity is mathematically in [-1, 1], but floating-point
+            # rounding can produce values such as 1.0000001. Keep PostgreSQL's
+            # CHECK constraint strict and clamp only this numerical overshoot.
+            best_similarity = None
+            if best is not None:
+                raw_similarity = float(best["similarity"])
+                if not np.isfinite(raw_similarity):
+                    raise ValueError("Candidate similarity must be finite")
+                best_similarity = float(np.clip(raw_similarity, -1.0, 1.0))
 
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -126,7 +135,7 @@ def persist_finalized_track_descriptors(
                         (
                             int(track_id),
                             int(best["persistent_vehicle_id"]),
-                            float(best["similarity"]),
+                            best_similarity,
                         ),
                     )
                     candidate_records.append(
@@ -134,7 +143,7 @@ def persist_finalized_track_descriptors(
                             "published_track_id": published_id,
                             "track_id": int(track_id),
                             "candidate_vehicle_id": int(best["persistent_vehicle_id"]),
-                            "similarity": float(best["similarity"]),
+                            "similarity": best_similarity,
                             "source_run_id": best["source_run_id"],
                             "source_published_track_id": int(
                                 best["source_published_track_id"]

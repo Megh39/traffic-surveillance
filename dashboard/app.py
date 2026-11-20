@@ -228,17 +228,14 @@ def fmt_time(value):
 
 
 def chart_theme(chart):
-    return (
-        chart.configure_view(strokeWidth=0)
-        .configure_axis(
-            labelColor=MUTED,
-            titleColor=MUTED,
-            gridColor="#E6E8E4",
-            domainColor=LINE,
-            tickColor=LINE,
-            labelFont="Barlow",
-            titleFont="Barlow",
-        )
+    return chart.configure_view(strokeWidth=0).configure_axis(
+        labelColor=MUTED,
+        titleColor=MUTED,
+        gridColor="#E6E8E4",
+        domainColor=LINE,
+        tickColor=LINE,
+        labelFont="Barlow",
+        titleFont="Barlow",
     )
 
 
@@ -273,7 +270,9 @@ try:
     health = fetch_api("/health", api_url)
 
     if health.get("status") != "healthy":
-        st.error("The API or database is not healthy. Check the API terminal for errors.")
+        st.error(
+            "The API or database is not healthy. Check the API terminal for errors."
+        )
         st.stop()
 
 except requests.RequestException as exc:
@@ -304,7 +303,9 @@ selected_run_id = None
 
 if completed_runs:
     run_options = {
-        f"{run['camera_id']} · {fmt_time(run['started_at'])} · {str(run['run_id'])[:8]}": run["run_id"]
+        f"{run['camera_id']} · {fmt_time(run['started_at'])} · {str(run['run_id'])[:8]}": run[
+            "run_id"
+        ]
         for run in completed_runs
     }
 
@@ -350,7 +351,9 @@ with tab_process:
         )
 
         if uploaded_file.size > MAX_UPLOAD_SIZE:
-            st.error(f"This video is over the {MAX_UPLOAD_MB} MB limit. Choose a smaller file.")
+            st.error(
+                f"This video is over the {MAX_UPLOAD_MB} MB limit. Choose a smaller file."
+            )
         else:
             start = action_col.button(
                 "Process video",
@@ -429,7 +432,9 @@ with tab_process:
         m1.metric("Frames processed", fmt_int(result.get("frames_processed", 0)))
         m2.metric("Total detections", fmt_int(result.get("total_detections", 0)))
         m3.metric("Unique vehicle tracks", fmt_int(result.get("unique_tracks", 0)))
-        m4.metric("Published observations", fmt_int(result.get("published_observations", 0)))
+        m4.metric(
+            "Published observations", fmt_int(result.get("published_observations", 0))
+        )
 
         m5, m6, m7, m8 = st.columns(4)
         m5.metric(
@@ -438,7 +443,10 @@ with tab_process:
         )
         m6.metric("Source FPS", fmt_float(result.get("fps", 0)))
         m7.metric("Processing FPS", fmt_float(result.get("processing_fps", 0)))
-        m8.metric("Avg inference latency", fmt_float(result.get("average_inference_ms", 0), " ms"))
+        m8.metric(
+            "Avg inference latency",
+            fmt_float(result.get("average_inference_ms", 0), " ms"),
+        )
 
         st.caption(
             f"Processed in {fmt_float(result.get('elapsed_seconds', 0))} seconds · "
@@ -458,11 +466,9 @@ with tab_process:
 
             video_col, _ = st.columns([3, 1])
             with video_col:
-                st.video(str(video_path), format="video/mp4")
+                st.video(video_url)
 
-            st.markdown(
-                f"[Open or download the processed video]({video_url})"
-            )
+            st.markdown(f"[Open or download the processed video]({video_url})")
 
 # =========================================================
 # ANALYTICS TABS (need a selected run)
@@ -478,7 +484,9 @@ if selected_run_id is not None:
         summary = summary_response["summary"]
         run = summary_response["run"]
 
-        vehicle_data = fetch_api("/analytics/vehicle-types", api_url, params).get("data", [])
+        vehicle_data = fetch_api("/analytics/vehicle-types", api_url, params).get(
+            "data", []
+        )
         timeline_data = fetch_api(
             "/analytics/observations-over-time", api_url, params
         ).get("data", [])
@@ -522,7 +530,9 @@ with tab_analytics:
         c4.metric("Track observations", fmt_int(summary["total_observations"]))
 
         c5, c6, c7, _ = st.columns(4)
-        c5.metric("Frames with observations", fmt_int(summary["frames_with_observations"]))
+        c5.metric(
+            "Frames with observations", fmt_int(summary["frames_with_observations"])
+        )
         c6.metric("Source video FPS", fmt_float(run["source_fps"]))
         c7.metric("Published observations", fmt_int(summary["published_observations"]))
 
@@ -578,7 +588,10 @@ with tab_analytics:
                                 alt.GradientStop(color="#B9DDCE", offset=0),
                                 alt.GradientStop(color="#EAF4EF", offset=1),
                             ],
-                            x1=1, x2=1, y1=1, y2=0,
+                            x1=1,
+                            x2=1,
+                            y1=1,
+                            y2=0,
                         ),
                         interpolate="monotone",
                     )
@@ -587,7 +600,9 @@ with tab_analytics:
                         y=alt.Y("observations:Q", title="Observations"),
                         tooltip=[
                             alt.Tooltip("seconds:Q", title="Second"),
-                            alt.Tooltip("observations:Q", title="Observations", format=","),
+                            alt.Tooltip(
+                                "observations:Q", title="Observations", format=","
+                            ),
                         ],
                     )
                     .properties(height=max(180, 38 * max(len(vehicle_data), 5)))

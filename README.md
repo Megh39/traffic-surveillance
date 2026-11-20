@@ -1,369 +1,406 @@
+# Traffic Video Surveillance and Vehicle Re-Identification
 
-# Traffic Video Surveillance and Vehicle Analytics System
+## 1. Project Overview
 
-## Overview
+The Traffic Video Surveillance and Vehicle Re-Identification system processes traffic videos, detects vehicles, tracks them through frames, extracts visual descriptors, and stores processing and identity information in PostgreSQL.
 
-The **Traffic Video Surveillance and Vehicle Analytics System** is a computer vision-based application designed to process traffic videos, detect vehicles, track their movement, and generate useful traffic analytics.
+The application has four main parts:
 
-The system uses YOLO-based object detection to identify vehicles in video frames and ByteTrack for multi-object tracking. Detected vehicles are assigned tracking IDs, allowing the system to maintain their identities across consecutive frames.
+1. **Video-processing pipeline** — reads video frames and runs vehicle detection, tracking, annotation, and ReID descriptor extraction.
+2. **YOLO11n and ByteTrack** — YOLO11n detects vehicles; ByteTrack associates detections across consecutive frames and produces application-published track IDs.
+3. **Vehicle Re-Identification (ReID)** — a pretrained OSNet-AIN x1.0 model runs through ONNX Runtime on the CPU and generates 512-dimensional vehicle descriptors.
+4. **FastAPI, PostgreSQL, and Streamlit** — FastAPI exposes processing and analytics endpoints, PostgreSQL stores results, and Streamlit displays the results.
 
-The application supports two processing workflows:
+The Python application runs from the Windows `.venv`. PostgreSQL runs separately in the existing Docker container named `traffic-postgres`.
 
-- **Video upload:** Upload a traffic video through the Streamlit dashboard and process it directly using the detection and tracking pipeline.
-- **Dataset processing:** Process the configured UA-DETRAC image sequence through the existing pipeline for traffic surveillance experiments and evaluation.
+## 2. Important ID Definitions
 
-Processed observations and tracking information are stored in PostgreSQL. A FastAPI backend exposes the stored information through REST APIs, while a Streamlit dashboard provides video playback, processing statistics, visualizations, and historical analytics.
+These IDs represent different things and must not be treated as interchangeable:
 
-## Key Features
+- **ByteTrack internal ID:** the track identifier used internally by the tracker.
+- **Published Track ID:** the application-level track identifier assigned to a confirmed track within one processing run.
+- **Persistent Vehicle ID:** an application-level identity intended to represent the same physical vehicle across different processing runs.
 
-- Vehicle detection using YOLO.
-- Multi-object vehicle tracking using ByteTrack.
-- Unique tracking IDs for detected vehicles.
-- Bounding-box and trajectory visualization.
-- Video ingestion from uploaded video files.
-- Image-sequence ingestion for dataset processing.
-- Annotated video generation and download.
-- PostgreSQL-based storage of tracking observations.
-- REST API integration using FastAPI.
-- Interactive dashboard using Streamlit.
-- Vehicle-type distribution and observation timeline visualizations.
-- Vehicle track records and CSV export.
-- Processing history across multiple video runs.
+A published track is not automatically a persistent vehicle identity. ReID compares visual descriptors and can produce a candidate match. A candidate is not a confirmed identity.
 
-## How the System Works
+## 3. ReID Model and Configuration
 
-The application follows a sequential video analytics pipeline.
+The project uses the pretrained Open Model Zoo `vehicle-reid-0001` model:
 
-### 1. Video Ingestion
+| Property                 | Value                                            |
+| ------------------------ | ------------------------------------------------ |
+| Architecture             | OSNet-AIN x1.0                                   |
+| Model format             | ONNX                                             |
+| Input size               | 208 × 208                                       |
+| Descriptor dimension     | 512                                              |
+| Runtime provider         | CPUExecutionProvider                             |
+| Intra-op threads         | 2                                                |
+| Inter-op threads         | 1                                                |
+| Descriptor normalization | L2 normalization enabled                         |
+| Model path               | `models/reid/osnet_ain_x1_0_vehicle_reid.onnx` |
 
-The system accepts video input through the `VideoFileSource` ingestion component.
+The model is pretrained. No training or fine-tuning is performed as part of the current project workflow. CPU inference is used to avoid requiring additional GPU memory alongside YOLO.
 
-For dashboard uploads, the user selects a video file, which is temporarily saved by the API before processing begins.
+The matching threshold in `config/reid.yaml` is deliberately unset (`null`). A cosine similarity is a comparison score, not a calibrated probability. It must not be interpreted as a percentage chance that two images show the same vehicle.
 
-The ingestion component reads the video frame by frame and extracts relevant information, including:
+## 4. ReID Processing Workflow
 
-- Frame image.
-- Frame ID.
-- Effective video FPS.
-- Elapsed time.
-- Source video information.
+For each published track, the descriptor collector samples suitable vehicle crops from frames. The current collector applies these default conditions:
 
-The system also supports image-sequence ingestion for dataset-based processing.
+- Detection confidence must be at least `0.50`.
+- Bounding-box area must be at least `1,024` pixels.
+- At least 3 valid descriptor samples are required for a track.
+- The observation must have a published track ID.
+- The descriptor must be finite, non-zero, and have 512 dimensions.
 
-### 2. Vehicle Detection
+Valid samples are aggregated into one normalized descriptor for the track. At the end of a video run, the descriptor is stored in PostgreSQL and the persistence layer checks for possible matches against descriptors from earlier runs.
 
-Each incoming frame is passed to the YOLO-based vehicle detector.
+Current identity statuses:
 
-The detector identifies vehicle objects and produces bounding boxes, class information, and confidence scores.
+| Status            | Meaning                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `new`           | A new persistent vehicle identity was created.                                                                       |
+| `candidate`     | A possible match to an existing persistent vehicle was found. It is not confirmed.                                   |
+| `confirmed`     | A candidate identity was explicitly confirmed.                                                                       |
+| `pending`       | Identity processing is pending.                                                                                      |
+| `not_processed` | The dashboard/API display label used when no identity record exists for a track. It is not a stored database status. |
 
-A configurable confidence threshold determines which detections are suitable for publication and subsequent processing.
+The current implementation does not automatically merge candidate identities. This is intentional until matching thresholds and decisions are validated on suitable held-out footage.
 
-### 3. Multi-Object Tracking
+## 5. Database and Docker
 
-The detections are passed to the ByteTrack tracker.
+PostgreSQL runs in the existing Docker container:
 
-The tracker associates detections across consecutive frames to maintain vehicle identities over time.
+- Container: `traffic-postgres`
+- Image: `postgres:16`
+- Database: `traffic_db`
+- User: `traffic_app`
+- Host port: `5432`
+- Persistent Docker volume: `traffic_postgres_data`
 
-Each confirmed vehicle track receives a published tracking ID. The tracker also maintains information about vehicle positions and movement across frames.
+The Python application connects using the settings in the project-root `.env` file. The application connects to `localhost:5432`; it does not start Docker itself.
 
-Tracking observations that satisfy the configured publication criteria are passed to the persistence and visualization stages.
+**Do not remove the existing Docker volume.** Do not run `docker compose down -v` for normal shutdown or restart. The named volume stores PostgreSQL data across container restarts.
 
-### 4. Visualization and Video Generation
+### Start/check PostgreSQL
 
-The tracking renderer processes the original frames along with the tracking observations.
-
-It generates annotated frames containing:
-
-- Vehicle bounding boxes.
-- Published vehicle tracking IDs.
-- Vehicle movement trajectories.
-
-The annotated frames are written into an output MP4 video.
-
-The resulting video can be viewed or downloaded through the dashboard.
-
-### 5. Database Persistence
-
-The system uses PostgreSQL to store processing and tracking information.
-
-The database maintains information about processing runs, cameras, vehicle tracks, and individual tracking observations.
-
-Important processing information includes:
-
-- Processing run ID.
-- Camera ID.
-- Source video FPS.
-- Number of processed frames.
-- Total detections.
-- Published observations.
-- Unique vehicle tracks.
-- Tracking and observation details.
-
-This allows the system to retrieve historical results without processing the same video again.
-
-### 6. Analytics and API Integration
-
-FastAPI provides the backend interface between the processing system, PostgreSQL database, and dashboard.
-
-The API exposes endpoints for:
-
-- Database health checks.
-- Processing summaries.
-- Vehicle-type statistics.
-- Observations over time.
-- Vehicle tracking records.
-- Processing history.
-- Video uploads and processing.
-- Downloading processed videos.
-
-### 7. Dashboard
-
-The Streamlit dashboard provides an interactive interface for using the application.
-
-Users can upload traffic videos, initiate processing, view the generated annotated video, and download the output.
-
-The dashboard also displays processing statistics, vehicle-type distribution, observation timelines, vehicle track records, and historical processing runs.
-
-## Pipeline Flow
-
-The overall processing workflow can be represented as:
-
-**Video Input → Frame Ingestion → YOLO Vehicle Detection → ByteTrack Tracking → Observation Persistence → Frame Annotation → Output Video**
-
-The supporting application workflow is:
-
-**Processing Pipeline → PostgreSQL Database → FastAPI Backend → Streamlit Dashboard**
-
-For uploaded videos, the API receives the video, invokes the processing pipeline, stores the resulting observations, and makes the annotated video available for playback and download.
-
-## Technology Stack
-
-| Component             | Technology         |
-| --------------------- | ------------------ |
-| Programming Language  | Python             |
-| Object Detection      | YOLO (Ultralytics) |
-| Multi-Object Tracking | ByteTrack          |
-| Computer Vision       | OpenCV             |
-| Database              | PostgreSQL         |
-| Backend API           | FastAPI            |
-| Dashboard             | Streamlit          |
-| Data Processing       | NumPy, Pandas      |
-| Dependency Management | uv                 |
-| Database Deployment   | Docker             |
-
-## Requirements
-
-Before running the application, ensure that the following are installed:
-
-- Python 3.11 or later, but below Python 3.14.
-- uv package manager.
-- Docker Desktop.
-- PostgreSQL database container configured for the project.
-- NVIDIA GPU with compatible drivers and CUDA support for GPU acceleration (CPU fallback is supported by the detector configuration).
-- Git.
-
-## Installation and Setup
-
-### 1. Clone the Repository
-
-```powershell
-git clone https://github.com/Megh39/traffic-surveillance.git
-cd traffic-surveillance
-```
-
-### 2. Install Dependencies
-
-Use uv to install the project dependencies:
-
-```powershell
-uv sync
-```
-
-### 3. Start PostgreSQL
-
-Ensure Docker Desktop is running.
-
-If the project's PostgreSQL container already exists but is stopped, start it using:
+Run these commands in PowerShell from the project directory:
 
 ```powershell
 docker start traffic-postgres
-```
-
-Verify that the container is running:
-
-```powershell
 docker ps
 ```
 
-The PostgreSQL container should expose port `5432`.
+If the container is already running, Docker may report that it is already started. `docker ps` verifies that it is running.
 
-Ensure the database has been initialized and the project's database connection settings are configured before starting the application.
-
-## Running the Application
-
-The application uses separate processes for the database, FastAPI backend, and Streamlit dashboard.
-
-Keep each service running in its own terminal.
-
-### 1. Start the FastAPI Backend
-
-Open a PowerShell terminal in the project directory:
+### Open the PostgreSQL shell
 
 ```powershell
-uv run uvicorn src.tvs.api.main:app --host 127.0.0.1 --port 8000 --reload
+docker exec -it traffic-postgres psql -U traffic_app -d traffic_db
 ```
 
-The API will be available at:
+Inside `psql`, list tables:
+
+```sql
+\dt
+```
+
+Exit the PostgreSQL shell:
+
+```sql
+\q
+```
+
+### Apply the ReID migration (only if it has not already been applied)
+
+From the project root in PowerShell:
+
+```powershell
+Get-Content .\migrations\001_add_reid_identity_tables.sql | docker exec -i traffic-postgres psql -U traffic_app -d traffic_db
+```
+
+The migration adds the ReID identity and descriptor tables. It is additive and does not require replacing the existing Compose configuration or PostgreSQL volume. If the tables already exist, inspect the output rather than deleting or recreating the database.
+
+## 6. Running the Application on Windows
+
+Use the existing project `.venv` and the same local commands used during development. Open separate PowerShell terminals for the API and dashboard.
+
+### Terminal 1 — FastAPI backend
+
+From the project root, with the project virtual environment active:
+
+```powershell
+uvicorn src.tvs.api.main:app --reload
+```
+
+API base address:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-Interactive API documentation is available at:
+API documentation:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-### 2. Verify the Backend
-
-Open the health endpoint:
+Health endpoint:
 
 ```text
 http://127.0.0.1:8000/health
 ```
 
-A successful response should look like:
+### Terminal 2 — Streamlit dashboard
 
-```json
-{
-  "status": "healthy",
-  "database": "connected"
-}
-```
-
-This confirms that the backend can communicate with PostgreSQL.
-
-### 3. Start the Streamlit Dashboard
-
-Open another PowerShell terminal in the project directory:
+From the project root, with the project virtual environment active:
 
 ```powershell
-uv run streamlit run dashboard/app.py
+streamlit run dashboard/app.py
 ```
 
-The dashboard will be available at:
+The dashboard normally opens at:
 
 ```text
 http://localhost:8501
 ```
 
-The dashboard communicates with the FastAPI backend, which retrieves and processes the required information from PostgreSQL.
+Keep the PostgreSQL container, FastAPI process, and Streamlit process running while using the application. Stop the API and dashboard with `Ctrl + C` in their respective terminals.
 
-## Uploading and Processing a Video
+## 7. Upload and Process a Video
 
-The dashboard supports direct video uploads.
+1. Open the Streamlit dashboard at `http://localhost:8501`.
+2. Open the video-processing section.
+3. Select a supported traffic video.
+4. Start processing and wait for the API request to finish.
+5. Review the processing statistics and annotated output video.
+6. Open the **Vehicle Re-ID** tab and select the completed processing run.
+7. Review descriptor counts, identity statuses, and candidate similarities.
 
-1. Open `http://localhost:8501`.
-2. Locate the **Upload and process a video** section.
-3. Select a video file.
-4. Click **Process uploaded video**.
-5. Wait for the processing operation to complete.
-6. Review the generated processing statistics.
-7. Play or download the annotated video.
+The ReID tab reads persisted descriptor and identity records for the selected run. It distinguishes newly assigned persistent IDs from unconfirmed cross-run candidates.
 
-Supported video formats:
+## 8. Results Obtained So Far
 
-- MP4
-- AVI
-- MOV
-- MKV
-- M4V
+### 8.1 VeRi cross-camera descriptor evaluation
 
-The current API upload limit is **500 MB**.
+The local evaluation used the existing ONNX model and the VeRi test annotations. All 11,579 annotated images were resolved and embedded.
 
-The processing result includes information such as:
+| Metric                                     |                  Result |
+| ------------------------------------------ | ----------------------: |
+| XML records                                |                  11,579 |
+| Resolved images                            |                  11,579 |
+| Missing images                             |                       0 |
+| Embedded images                            |                  11,579 |
+| Vehicle identities                         |                     200 |
+| Camera IDs                                 | 19 (`c001`–`c019`) |
+| Identities represented in multiple cameras |                     200 |
+| Valid queries                              |                  11,579 |
+| Queries without cross-camera positives     |                       0 |
+| Rank-1 accuracy                            |                  98.16% |
+| mAP                                        |                  85.82% |
+| Evaluation time reported by script         |          23.286 seconds |
 
-- Frames processed.
-- Total vehicle detections.
-- Publishable detections.
-- Published tracking observations.
-- Unique vehicle tracks.
-- Source video resolution and FPS.
-- Processing FPS.
-- Average inference latency.
-- Tracking association statistics.
+**Evaluation protocol:** every annotated image was used as a query; images from the query camera were excluded from that query's gallery; gallery images with the same `vehicleID` from another camera were treated as positives.
 
-The original uploaded file is temporarily stored during processing and removed after the request completes. The generated annotated video is retained in the output directory.
+**Limitations:** this is the explicitly implemented all-annotated-images cross-camera retrieval protocol. It is not necessarily identical to the official VeRi-776 query/gallery protocol. Model training-data provenance must be checked before treating the result as an independent benchmark. Retrieval similarity is not a calibrated probability and does not by itself justify automatic identity merging.
 
-## Running the Dataset Processing Pipeline
+Evaluation outputs created locally:
 
-The project also supports processing the configured UA-DETRAC image sequence through the existing command-line pipeline.
+- `data\veri_cross_camera_results.json`
+- `data\veri_cross_camera_embeddings.npz`
+- `data\veri_cross_camera_results_manifest.csv`
 
-To run it:
+### 8.2 Video processing and ReID persistence run
 
-```powershell
-uv run python scripts/run_pipeline.py
+A previously completed video run produced the following processing results:
+
+| Metric                                    |        Result |
+| ----------------------------------------- | ------------: |
+| Frames processed                          |           456 |
+| Total detections                          |        12,592 |
+| Published observations                    |         8,866 |
+| Unique published tracks                   |           110 |
+| Descriptors persisted                     |            82 |
+| Persistent identities created in that run |            82 |
+| Candidate matches in that run             |             0 |
+| Tracks without stored descriptors         |            28 |
+| ReID persistence time                     | 0.866 seconds |
+
+The database was subsequently checked and contained 110 tracks, 82 descriptor rows, 82 identity rows, and 82 persistent vehicle records for that run.
+
+### 8.3 Later dashboard run showing candidate matches
+
+A later dashboard screenshot for a different selected processing run showed:
+
+| Dashboard metric    | Result |
+| ------------------- | -----: |
+| Tracks in run       |    110 |
+| Descriptors stored  |     82 |
+| New persistent IDs  |      0 |
+| Candidate matches   |     82 |
+| Confirmed matches   |      0 |
+| Pending             |      0 |
+| Not processed       |     28 |
+| Missing descriptors |     28 |
+
+This dashboard result indicates that 82 tracks had candidate identity records and 28 tracks had no descriptor/identity record. It does **not** establish that all 82 candidates are correct physical-vehicle matches. Candidate matches remain unconfirmed.
+
+### 8.4 Descriptor collector unit tests
+
+The following tests passed:
+
+- Descriptor conversion and aggregation.
+- Insufficient sample handling.
+- Rejection of low-confidence observations and duplicate frames.
+- Unpublished track handling.
+
+### 8.5 Database lookup, persistence, and pipeline helper tests
+
+The following test groups passed during development:
+
+- Track ID lookup: 3 tests.
+- Run persistence: 4 tests.
+- ReID pipeline lookup/integration helper: 2 tests.
+- Descriptor collector: 4 tests.
+
+Combined test run at that point:
+
+```text
+Ran 13 tests
+OK
 ```
 
-The pipeline uses the configured camera, detector, and tracker settings to process the image sequence.
+Python compilation of the updated video processor, ReID integration, track lookup, descriptor collector, and run persistence modules also completed successfully at that point.
 
-The resulting processing run and tracking observations are stored in PostgreSQL, and the generated annotated video is written to the configured output location.
+These unit tests and compilation checks do not replace an end-to-end test using the current local code, database, API, and dashboard.
 
-## Useful Development Commands
+## 9. Useful Development and Verification Commands
 
-### Run the Full Test Suite
+Run these from PowerShell at the project root, using the project's active `.venv`.
 
-```powershell
-uv run pytest
-```
-
-### Run Detector Tests
+### Run all unit tests
 
 ```powershell
-uv run pytest tests/perception/test_vehicle_detector.py
+python -m unittest discover -s tests -v
 ```
 
-### Run Ingestion Tests
+### Run the descriptor collector tests
 
 ```powershell
-uv run pytest tests/ingestion/
+python -m unittest discover -s tests -p "test_track_descriptor_collector.py" -v
 ```
 
-### Check Python Syntax
-
-For example:
+### Run the track ID lookup tests
 
 ```powershell
-uv run python -m py_compile src/tvs/api/main.py
+python -m unittest discover -s tests -p "test_track_id_lookup.py" -v
 ```
 
-### Check Docker Containers
+### Run the persistence tests
+
+```powershell
+python -m unittest discover -s tests -p "test_run_persistence.py" -v
+```
+
+### Run the ReID pipeline lookup tests
+
+```powershell
+python -m unittest discover -s tests -p "test_reid_pipeline_lookup.py" -v
+```
+
+### Compile the ReID-related Python modules
+
+```powershell
+python -m py_compile src/tvs/pipeline/video_processor.py src/tvs/pipeline/reid_integration.py src/tvs/db/track_id_lookup.py src/tvs/reid/track_descriptor_collector.py src/tvs/reid/run_persistence.py
+```
+
+Check the exit code immediately after compilation:
+
+```powershell
+$LASTEXITCODE
+```
+
+A value of `0` indicates that compilation succeeded.
+
+### Verify the ReID database counts for a run
+
+Open the PostgreSQL shell using the command in Section 5, then run the following SQL after replacing the run ID with the run being inspected:
+
+```sql
+SELECT
+    COUNT(*) AS total_tracks,
+    COUNT(d.track_id) AS descriptors_stored,
+    COUNT(i.track_id) AS identity_records,
+    COUNT(DISTINCT i.persistent_vehicle_id) AS persistent_identities
+FROM vehicle_tracks t
+LEFT JOIN vehicle_reid_descriptors d
+    ON t.track_id = d.track_id
+LEFT JOIN vehicle_track_identities i
+    ON t.track_id = i.track_id
+WHERE t.run_id = 'PASTE-RUN-UUID-HERE';
+```
+
+### List tracks that do not have stored descriptors
+
+Replace the run UUID with the run being investigated:
+
+```sql
+SELECT
+    t.published_track_id,
+    t.vehicle_type,
+    t.observation_count,
+    t.first_frame_id,
+    t.last_frame_id
+FROM vehicle_tracks t
+LEFT JOIN vehicle_reid_descriptors d
+    ON t.track_id = d.track_id
+WHERE t.run_id = 'PASTE-RUN-UUID-HERE'
+  AND d.track_id IS NULL
+ORDER BY t.published_track_id;
+```
+
+### Inspect identity statuses and candidate similarities
+
+```sql
+SELECT
+    t.run_id,
+    t.published_track_id,
+    t.vehicle_type,
+    i.match_status,
+    i.persistent_vehicle_id,
+    i.candidate_vehicle_id,
+    i.candidate_similarity
+FROM vehicle_tracks t
+LEFT JOIN vehicle_track_identities i
+    ON t.track_id = i.track_id
+ORDER BY t.run_id, t.published_track_id;
+```
+
+### Check Docker and PostgreSQL port
 
 ```powershell
 docker ps
+Test-NetConnection localhost -Port 5432
 ```
 
-### Stop the PostgreSQL Container
+## 10. Interpreting Missing Descriptors
 
-```powershell
-docker stop traffic-postgres
-```
+A track without a descriptor is still a tracked vehicle. It means that the ReID collector did not produce a descriptor that passed its current collection and validation rules, or no descriptor was persisted for that track.
 
-To stop the FastAPI and Streamlit applications, press `Ctrl + C` in their respective terminals.
+The current collector's minimum sample count, confidence threshold, and bounding-box area threshold are possible reasons. The current database does not record a detailed rejection reason for each missing descriptor, so the exact cause must be investigated from the track's observations and processing logs. Do not lower all thresholds without checking the cause; low-quality descriptors can increase false candidate matches.
 
-## Important Notes
+## 11. Current Limitations and Next Validation Steps
 
-- PostgreSQL must be running before using the backend and dashboard.
-- FastAPI and Streamlit must both be running for the complete dashboard experience.
-- Video processing currently runs synchronously through the API request.
-- Processing time depends on video resolution, frame count, and available hardware.
-- The detector supports automatic device selection and CPU fallback according to its configuration.
-- Tracking quality can vary depending on vehicle overlap, occlusion, camera angle, video quality, and movement.
-- The application is currently designed for local execution and demonstration.
+- The ReID system produces candidate matches; candidate records are not automatically confirmed or merged.
+- The cosine similarity threshold remains unset pending calibration on held-out footage.
+- A missing descriptor does not mean ByteTrack failed to track the vehicle.
+- The reason for each missing descriptor is not yet stored as a database diagnostic.
+- The VeRi evaluation is a custom retrieval protocol and must be described as such.
+- A convincing end-to-end cross-video demonstration requires two videos containing the same physical vehicles, with ground-truth identity annotations or independently verified matching vehicles.
+- Similar-looking vehicles can produce false candidates. Candidate similarity alone is insufficient to establish identity.
 
-## Project Objective
+## 12. Project Objective
 
-The primary objective of this project is to develop an integrated traffic video surveillance and analytics system that combines computer vision, multi-object tracking, database persistence, backend API services, and interactive visualization.
+The project aims to combine vehicle detection, within-video multi-object tracking, vehicle appearance descriptors, cross-run ReID candidate retrieval, PostgreSQL persistence, API services, and an interactive dashboard into one traffic surveillance application.
 
-By connecting these components into a single workflow, the system transforms raw traffic videos into annotated video outputs and structured tracking information that can be used for traffic analysis and monitoring.
+The current implementation demonstrates vehicle detection and tracking, descriptor extraction and persistence, and candidate generation. Confirmed cross-camera identity performance still requires carefully controlled validation and calibration.
